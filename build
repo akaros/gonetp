@@ -1,0 +1,6 @@
+#!/bin/bash
+
+export GO=$GOROOT/bin/go
+$GO build -o gonetp-client client.go
+$GO build -o gonetp-server server.go
+
