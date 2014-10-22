@@ -44,6 +44,7 @@ func main() {
 		}
 		msglen, e := strconv.Atoi(args[3]);
 		checke(e)
+		fmt.Printf("msglen = %d, txlen = %s\n", msglen, args[4]);
 		switch args[2] {
 		case "stream": go rx_stream(client, args[1], msglen)
 		case "rr" : {
@@ -90,7 +91,11 @@ func rx_stream(client net.Conn, proto string, msglen int) {
 		fmt.Println("Read ", messages, " messages and ", bytes, " bytes");
 		fmt.Println("Bandwidth is", bandwidth, "Mb/s");
 	}
-	utilization.Calc_cpu(string(cpu_before), string(cpu_after))
+	u, ncpu := utilization.Calc_cpu(string(cpu_before), string(cpu_after))
+	results := fmt.Sprintf("%s:%d:%f:%d:%d:%d:eof\n", "goodbye", ncpu, u, elapsedns, bytes, messages);
+	fmt.Println("Writing:  ", results)
+	n, e := client.Write([]byte(results))
+	fmt.Println("Wrote ", n, " bytes, with error", e)
 }
 
 func rx_rr(client net.Conn, proto string, msglen int, txlen int) {
@@ -106,6 +111,7 @@ func rx_rr(client net.Conn, proto string, msglen int, txlen int) {
 	client.Write([]byte(ports[len(ports) - 1]))
 	p, e := server.Accept();
 	length, e  := p.Read(buffer)
+	cpu_before, e := utilization.Read_cpu()
 	startns := time.Now().UnixNano();
 	bytes := int64(0);
 	messages := int64(0);
@@ -122,9 +128,12 @@ func rx_rr(client net.Conn, proto string, msglen int, txlen int) {
 		}
 	}
 	if (e != io.EOF) {
+		fmt.Println("err =", e)
 		log.Fatal(e);
 	}
 	elapsedns := time.Now().UnixNano() - startns;
+	cpu_after, e := utilization.Read_cpu()
+	checke(e)
 	bandwidth := float64(bytes) / (float64(elapsedns) /  float64(1000 * 1000 * 1000));
 	bandwidth = bandwidth * 8.0 / (1000.0 * 1000.0)
 	if (verbose > 0) {
@@ -132,5 +141,10 @@ func rx_rr(client net.Conn, proto string, msglen int, txlen int) {
 		fmt.Println("Read ", messages, " messages and ", bytes, " bytes");
 		fmt.Println("Bandwidth is", bandwidth, "Mb/s");
 	}
+	u, ncpu := utilization.Calc_cpu(string(cpu_before), string(cpu_after))
+	results := fmt.Sprintf("%s:%d:%f:%d:%d:%d:eof\n", "goodbye", ncpu, u, elapsedns, bytes, messages);
+	fmt.Println("Writing:  ", results)
+	n, e := client.Write([]byte(results))
+	fmt.Println("Wrote ", n, " bytes, with error", e)
 }
 

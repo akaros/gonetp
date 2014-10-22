@@ -36,6 +36,11 @@ type test_results struct {
 	elapsed int64;
 	bytes int64;
 	messages int64;
+	server_util float64;
+	server_cpu_cnt int;
+	server_elapsed int64;
+	server_bytes int64;
+	server_messages int64;
 }
 
 func main() {
@@ -49,10 +54,10 @@ func main() {
 	flag.IntVar(&testlen, "l", 10, "Test duration in seconds");
 	flag.IntVar(&verbose, "v", 0, "verbose level");
 	flag.IntVar(&threadcnt, "C", 1, "Concurrent threads");
-	flag.StringVar(&tx_msglen, "m", "8192, 8192", "xmit message length");
-	rem_tx_len = 8192
-	flag.StringVar(&rx_msglen, "M", "8192, 8192", "rx message length");
-	rem_rx_len = 8192
+	flag.StringVar(&tx_msglen, "m", "16384, 16384", "xmit message length");
+	rem_tx_len = 16384
+	flag.StringVar(&rx_msglen, "M", "16384, 16384", "rx message length");
+	rem_rx_len = 16384
 	flag.Parse();
 
 
@@ -100,9 +105,13 @@ func main() {
 	time.Sleep(1 * time.Second)
 	cpu_before, e := utilization.Read_cpu()
 	close(barrier);
-	tot := test_results{0, 0, 0}
+	tot := test_results{0, 0, 0, 0, 0, 0, 0, 0}
 	tot_msgs_per_sec := 0.0
+	server_tot_msgs_per_sec := 0.0
 	mb_per_sec := 0.0
+	server_mb_per_sec := 0.0
+	server_util := 0.0
+	server_ncpu := 0
 	for i := 0; i < threadcnt; i++ {
 		r := <- bw_chan
 		tot.elapsed += r.elapsed
@@ -111,17 +120,69 @@ func main() {
 		secs := float64(r.elapsed) / (1000.0 * 1000.0 * 1000.0)
 		mb_per_sec += ((float64(r.bytes) * 8.0) / (1000.0 * 1000.0)) / secs
 		tot_msgs_per_sec += float64(r.messages) / secs;
+
+		tot.server_elapsed += r.server_elapsed
+		tot.server_bytes += r.server_bytes
+		tot.server_messages += r.server_messages
+		secs = float64(r.server_elapsed) / (1000.0 * 1000.0 * 1000.0)
+		server_mb_per_sec += ((float64(r.server_bytes) * 8.0) / (1000.0 * 1000.0)) / secs
+		server_tot_msgs_per_sec += float64(r.server_messages) / secs;
+		server_util += r.server_util;
+		server_ncpu = r.server_cpu_cnt
 	}
 	cpu_after, e := utilization.Read_cpu()
 	checke(e)
-	utilization.Calc_cpu(string(cpu_before), string(cpu_after))
+	u, ncpu := utilization.Calc_cpu(string(cpu_before), string(cpu_after))
 	secs := float64(tot.elapsed) / (1000.0 * 1000.0 * 1000.0);
 	msgs_per_sec := float64(tot.messages) / secs;
 	lat := 0.5 * (1.0 / msgs_per_sec) * 1000.0 * 1000.0
-	fmt.Printf("Bandwidth is %6.2f Mb/s\n", mb_per_sec);
-	fmt.Printf("Message rate is %6.2f Pkts/s\n", tot_msgs_per_sec);
-	if (test_type == "TCP_RR") {
-		fmt.Printf("Average Latency is %6.2f us/pkt\n", lat)
+	if (verbose > 1) {
+		fmt.Printf("Bandwidth is %6.2f Mb/s\n", mb_per_sec);
+		fmt.Printf("Message rate is %6.2f Pkts/s\n", tot_msgs_per_sec);
+		fmt.Printf("CPU utilization is %6.2f of %d cores\n", u, ncpu)
+		fmt.Printf("Server CPU utilization is %6.2f of %d cores\n", server_util / float64(threadcnt),
+			server_ncpu)
+		fmt.Printf("Server Bandwidth is %6.2f Mb/s\n", server_mb_per_sec);
+		fmt.Printf("Server Message rate is %6.2f Pkts/s\n", server_tot_msgs_per_sec);
+		if (test_type == "TCP_RR") {
+			fmt.Printf("Average Latency is %6.2f us/pkt\n", lat)
+		}
+	}
+	server_util = server_util / float64(threadcnt)
+	switch test_type {
+	case "TCP_STREAM":
+		fmt.Printf("\tRecv\tSend\t\t\t\t\tUtilization\n")
+		fmt.Printf("\tmsg\tmsg\tElapsed\n")
+		fmt.Printf("thread\tsize\tsize\tTime\tThroughput\tlocal\tremote\tlocal\tremote\n")
+		fmt.Printf("count\tbytes\tbytes\tsecs\tMb/s\t\t%%cpu\t%%cpu\t#cores\t#cores\n")
+		fmt.Printf("......\t......\t......\t......\t......\t\t......\t......\t......\t......\n")
+		fmt.Printf("%6d\t", threadcnt)
+		fmt.Printf("%6d\t%6d\t", rem_rx_len, loc_tx_len)
+		fmt.Printf("%-6.2f\t", secs);
+		fmt.Printf("%6.2f\t\t", mb_per_sec);
+		fmt.Printf("%6.2f\t", u);
+		fmt.Printf("%6.2f\t", server_util);
+		fmt.Printf("%6.2f\t", (u/100.0) * float64(ncpu));
+		fmt.Printf("%6.2f\n", (server_util/100.0) * float64(server_ncpu));
+	case "TCP_RR":
+		fmt.Printf("\tRecv\tSend\t\t\t\t\tUtilization\n")
+		fmt.Printf("\tmsg\tmsg\tElapsed\n")
+		fmt.Printf("thread\tsize\tsize\tTime\tThroughput\tlocal\tremote\tlocal\tremote\n")
+		fmt.Printf("count\tbytes\tbytes\tsecs\tMsg/s\t\t%%cpu\t%%cpu\t#cores\t#cores\n")
+		fmt.Printf("......\t......\t......\t......\t......\t\t......\t......\t......\t......\n")
+		fmt.Printf("%6d\t", threadcnt)
+		fmt.Printf("%6d\t%6d\t", loc_rx_len, loc_tx_len)
+		fmt.Printf("%6.2f\t", secs);
+		fmt.Printf("%9.2f\t", tot_msgs_per_sec)
+		fmt.Printf("%6.2f\t", u);
+		fmt.Printf("%6.2f\t", server_util);
+		fmt.Printf("%6.2f\t", (u/100.0) * float64(ncpu));
+		fmt.Printf("%6.2f\n", (server_util/100.0) * float64(server_ncpu));
+		fmt.Printf("\t")
+		fmt.Printf("%6d\t%6d\t", rem_rx_len, rem_tx_len)
+		fmt.Printf("\t")
+		fmt.Printf("%6.2f\n", lat)
+
 	}
 }
 
@@ -142,14 +203,15 @@ func worker(bw_chan chan test_results, barrier chan struct{}) {
 	_, e = s.Read(handshake_buffer);
 	switch test_type {
 	case "TCP_STREAM":
-		tcp_stream(bw_chan, barrier, string(handshake_buffer))
+		tcp_stream(bw_chan, barrier, string(handshake_buffer), s)
 	case "TCP_RR":
-		tcp_rr(bw_chan, barrier, string(handshake_buffer))
+		tcp_rr(bw_chan, barrier, string(handshake_buffer), s)
 	}
 }
 
-func tcp_stream(bw_chan chan test_results, barrier chan struct{}, remote_port string) {
-	b, e := net.Dial("tcp", host + ":" + remote_port)
+func tcp_stream(bw_chan chan test_results, barrier chan struct{}, server string, s net.Conn) {
+	var results test_results;
+	b, e := net.Dial("tcp", host + ":" + server)
 	if e != nil {
 		log.Fatal(e)
 	}
@@ -167,30 +229,42 @@ func tcp_stream(bw_chan chan test_results, barrier chan struct{}, remote_port st
 	}
 
 	time.AfterFunc(time.Duration(testlen) * time.Second, f);
-	bytes := int64(0);
-	messages := int64(0);
+	results.bytes = int64(0);
+	results.messages = int64(0);
 	startns := time.Now().UnixNano();
 	for (!times_up) {
 		wrote, e := b.Write(tx_buffer);
 		if e != nil {
 			log.Fatal(e);
 		}
-		messages++;
-		bytes += int64(wrote);
+		results.messages++;
+		results.bytes += int64(wrote);
 	}
-	elapsedns := time.Now().UnixNano() - startns;
-	bandwidth := float64(bytes) / (float64(elapsedns) /  float64(1000 * 1000 * 1000));
-	bandwidth = bandwidth * 8.0 / (1000.0 * 1000.0)
+	results.elapsed = time.Now().UnixNano() - startns;
 	if (verbose > 0) {
-		fmt.Println("Elapsted time is ", elapsedns);
-		fmt.Println("Read ", messages, " messages and ", bytes, " bytes");
+		bandwidth := float64(results.bytes) / (float64(results.elapsed) /  float64(1000 * 1000 * 1000));
+		bandwidth = bandwidth * 8.0 / (1000.0 * 1000.0)
+		fmt.Println("Elapsted time is ", results.elapsed);
+		fmt.Println("Wrote ", results.messages, " messages and ", results.bytes, " bytes");
 		fmt.Printf("Bandwidth is %6.2f Mb/s\n", bandwidth);
 	}
-	bw_chan <- test_results{elapsedns, bytes, messages}
+	b.Close();
+	server_result := make([]byte, 1024)
+	_, e = s.Read(server_result)
+	checke(e)
+	if (verbose > 0) {
+		fmt.Println("server said", string(server_result))
+	}
+	fmt.Sscanf(string(server_result), "goodbye:%d:%f:%d:%d:%d",
+		&results.server_cpu_cnt, &results.server_util, &results.server_elapsed,
+		&results.server_bytes, &results.server_messages)
+	bw_chan <- results
 }
 
-func tcp_rr(bw_chan chan test_results, barrier chan struct{}, remote_port string) {
-	b, e := net.Dial("tcp", host + ":" + remote_port)
+func tcp_rr(bw_chan chan test_results, barrier chan struct{}, remote_port string, s net.Conn) {
+	var results test_results;
+	t,e := net.ResolveTCPAddr("tcp", host + ":" + remote_port)
+	b, e := net.DialTCP("tcp", nil, t)
 	if e != nil {
 		log.Fatal(e)
 	}
@@ -209,28 +283,35 @@ func tcp_rr(bw_chan chan test_results, barrier chan struct{}, remote_port string
 	}
 
 	time.AfterFunc(time.Duration(testlen) * time.Second, f);
-	bytes := int64(0);
-	messages := int64(0);
+	results.bytes = int64(0);
+	results.messages = int64(0);
 	startns := time.Now().UnixNano();
 	for (!times_up) {
 		wrote, e := b.Write(tx_buffer);
 		if e != nil {
 			log.Fatal(e);
 		}
-		messages++;
-		bytes += int64(wrote);
+		results.messages++;
+		results.bytes += int64(wrote);
 		_, e  = b.Read(rx_buffer)
 		if (e != nil) {
 			break;
 		}
 	}
-	elapsedns := time.Now().UnixNano() - startns;
-	bandwidth := float64(bytes) / (float64(elapsedns) /  float64(1000 * 1000 * 1000));
-	bandwidth = bandwidth * 8.0 / (1000.0 * 1000.0)
+	results.elapsed = time.Now().UnixNano() - startns;
+	b.CloseWrite();
+	server_result := make([]byte, 1024)
+	_, e = s.Read(server_result)
+	checke(e)
 	if (verbose > 0) {
-		fmt.Println("Elapsted time is ", elapsedns);
-		fmt.Println("Read ", messages, " messages and ", bytes, " bytes");
+		bandwidth := float64(results.bytes) / (float64(results.elapsed) /  float64(1000 * 1000 * 1000));
+		bandwidth = bandwidth * 8.0 / (1000.0 * 1000.0)
+		fmt.Println("Elapsted time is ", results.elapsed);
+		fmt.Println("Read ", results.messages, " messages and ", results.bytes, " bytes");
 		fmt.Printf("Bandwidth is %6.2f Mb/s\n", bandwidth);
 	}
-	bw_chan <- test_results{elapsedns, bytes, messages}
+	fmt.Sscanf(string(server_result), "goodbye:%d:%f:%d:%d:%d",
+		&results.server_cpu_cnt, &results.server_util, &results.server_elapsed,
+		&results.server_bytes, &results.server_messages)
+	bw_chan <- results
 }

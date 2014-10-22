@@ -21,8 +21,8 @@ func read_akaros_cpu(line string, l *akaros_cpu_usage) {
 		&l.idle, &dontcarei)
 }
 
-func Calc_akaros_cpu(before string, after string) (utilized float64) {
-	num_cpu := strings.Count(before, ":") - 1;
+func Calc_akaros_cpu(before string, after string) (utilized float64, num_cpu int) {
+	num_cpu = strings.Count(before, ":") - 1;
 	before_cpu := make([]akaros_cpu_usage, num_cpu)
 	after_cpu := make([]akaros_cpu_usage, num_cpu)
 	lines := strings.Split(string(before), "\n");
@@ -49,8 +49,8 @@ func Calc_akaros_cpu(before string, after string) (utilized float64) {
 	}
 	total_tick := idle + busy;
 	utilized = 100.0 * (busy / total_tick);
-	fmt.Println("cpu count is ", num_cpu, "idle=", idle, " busy=", busy);
-	fmt.Printf("cpu utilized = %3.2f\n", utilized);
+//	fmt.Println("cpu count is ", num_cpu, "idle=", idle, " busy=", busy);
+//	fmt.Printf("cpu utilized = %3.2f\n", utilized);
 	return;
 }
 
@@ -79,8 +79,8 @@ func linux_tick_subtract(start uint64, end uint64) (r uint64){
 	return;
 }
 
-func Calc_linux_cpu(before string, after string) (utilized float64) {
-	num_cpu := strings.Count(before, "cpu") - 1;
+func Calc_linux_cpu(before string, after string) (utilized float64, num_cpu int) {
+	num_cpu = strings.Count(before, "cpu") - 1;
 	before_cpu := make([]linux_cpu_usage, num_cpu)
 	after_cpu := make([]linux_cpu_usage, num_cpu)
 	lines := strings.Split(string(before), "\n");
@@ -102,8 +102,8 @@ func Calc_linux_cpu(before string, after string) (utilized float64) {
 	for i := 0; i < num_cpu; i++ {
 		idle += linux_tick_subtract(before_cpu[i].idle,
 			after_cpu[i].idle);
-		if (i == 0) {
-			fmt.Println("idle ", idle, " before ", 
+		if (false && i == 0) {
+			fmt.Println("idle ", idle, " before ",
 				before_cpu[i].idle, " after ",
 				after_cpu[i].idle);
 		}
@@ -126,20 +126,20 @@ func Calc_linux_cpu(before string, after string) (utilized float64) {
 		busy += linux_tick_subtract(before_cpu[i].guest_nice,
 			after_cpu[i].guest_nice);
 	}
-	fmt.Println("cpu count is ", num_cpu, "idle=", idle, " busy=", busy);
+	// fmt.Println("cpu count is ", num_cpu, "idle=", idle, " busy=", busy);
 	total_tick := float64(idle + busy);
 	utilized = 100.0 * (float64(busy) / total_tick);
-	fmt.Printf("cpu utilized = %3.2f\n", utilized);
+	// fmt.Printf("cpu utilized = %3.2f\n", utilized);
 	return
 }
 
 
-func Calc_cpu(before string, after string) (cpu float64) {
+func Calc_cpu(before string, after string) (cpu float64, num_cpu int) {
 	_, e := ioutil.ReadFile("/proc/stat")
 	if (e == nil) {
-		cpu = Calc_linux_cpu(before, after)
+		cpu, num_cpu = Calc_linux_cpu(before, after)
 	} else {
-		cpu = Calc_akaros_cpu(before, after)
+		cpu, num_cpu = Calc_akaros_cpu(before, after)
 	}
 	return
 }
