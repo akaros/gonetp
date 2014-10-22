@@ -44,7 +44,9 @@ func main() {
 		}
 		msglen, e := strconv.Atoi(args[3]);
 		checke(e)
-		fmt.Printf("msglen = %d, txlen = %s\n", msglen, args[4]);
+		if (verbose > 1) {
+			fmt.Printf("msglen = %d, txlen = %s\n", msglen, args[4]);
+		}
 		switch args[2] {
 		case "stream": go rx_stream(client, args[1], msglen)
 		case "rr" : {
@@ -62,7 +64,9 @@ func rx_stream(client net.Conn, proto string, msglen int) {
 	server, e := net.Listen("tcp", ":0");
 	checke(e)
 
-	fmt.Println("stream listen on", server.Addr());
+	if (verbose > 0 ) {
+		fmt.Println("stream listen on", server.Addr());
+	}
 	ports := strings.SplitAfter((server.Addr().String()), ":")
 	client.Write([]byte(ports[len(ports) - 1]))
 	p, e := server.Accept();
@@ -93,13 +97,14 @@ func rx_stream(client net.Conn, proto string, msglen int) {
 	}
 	u, ncpu := utilization.Calc_cpu(string(cpu_before), string(cpu_after))
 	results := fmt.Sprintf("%s:%d:%f:%d:%d:%d:eof\n", "goodbye", ncpu, u, elapsedns, bytes, messages);
-	fmt.Println("Writing:  ", results)
-	n, e := client.Write([]byte(results))
-	fmt.Println("Wrote ", n, " bytes, with error", e)
+	_, e = client.Write([]byte(results))
+	checke(e)
 }
 
 func rx_rr(client net.Conn, proto string, msglen int, txlen int) {
 	buffer := make([]byte, msglen);
+	var rlen int
+	var curlen int
 	txbuffer := make([]byte, txlen);
 	server, e := net.Listen("tcp", ":0");
 	checke(e)
@@ -120,9 +125,19 @@ func rx_rr(client net.Conn, proto string, msglen int, txlen int) {
 		if (e != nil) {
 			break;
 		}
+		if (length != txlen) {
+			fmt.Println("Short write! ", length)
+		}
 		bytes = bytes + int64(length);
 		messages++;
-		length, e  = p.Read(buffer)
+		rlen = 0
+		for (rlen != msglen) {
+			curlen, e  = p.Read(buffer)
+			rlen += curlen
+			if (e != nil) {
+				break
+			}
+		}
 		if (e != nil) {
 			break;
 		}
@@ -143,8 +158,7 @@ func rx_rr(client net.Conn, proto string, msglen int, txlen int) {
 	}
 	u, ncpu := utilization.Calc_cpu(string(cpu_before), string(cpu_after))
 	results := fmt.Sprintf("%s:%d:%f:%d:%d:%d:eof\n", "goodbye", ncpu, u, elapsedns, bytes, messages);
-	fmt.Println("Writing:  ", results)
-	n, e := client.Write([]byte(results))
-	fmt.Println("Wrote ", n, " bytes, with error", e)
+	_, e = client.Write([]byte(results))
+	checke(e)
 }
 

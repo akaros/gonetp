@@ -76,6 +76,15 @@ func main() {
 	case "TCP_RR":
 		proto = "tcp";
 		ttype = "rr";
+		if (loc_tx_len != rem_rx_len) {
+			fmt.Println("overriding rem rx len to ", loc_tx_len)
+			rem_rx_len = loc_tx_len
+		}
+		if (loc_rx_len != rem_tx_len) {
+			fmt.Println("overriding rem tx len to ", loc_rx_len)
+			rem_tx_len = loc_rx_len
+		}
+
 	default:
 		fmt.Println("Unsupported test ", test_type);
 		return;
@@ -179,9 +188,7 @@ func main() {
 		fmt.Printf("%6.2f\t", (u/100.0) * float64(ncpu));
 		fmt.Printf("%6.2f\n", (server_util/100.0) * float64(server_ncpu));
 		fmt.Printf("\t")
-		fmt.Printf("%6d\t%6d\t", rem_rx_len, rem_tx_len)
-		fmt.Printf("\t")
-		fmt.Printf("%6.2f\n", lat)
+		fmt.Printf("%6.2fus 1/2RTT\n", lat)
 
 	}
 }
@@ -263,6 +270,8 @@ func tcp_stream(bw_chan chan test_results, barrier chan struct{}, server string,
 
 func tcp_rr(bw_chan chan test_results, barrier chan struct{}, remote_port string, s net.Conn) {
 	var results test_results;
+	var rlen int
+	var curlen int
 	t,e := net.ResolveTCPAddr("tcp", host + ":" + remote_port)
 	b, e := net.DialTCP("tcp", nil, t)
 	if e != nil {
@@ -291,9 +300,19 @@ func tcp_rr(bw_chan chan test_results, barrier chan struct{}, remote_port string
 		if e != nil {
 			log.Fatal(e);
 		}
+		if (wrote != loc_tx_len) {
+			fmt.Println("Short write! ", wrote)
+		}
 		results.messages++;
 		results.bytes += int64(wrote);
-		_, e  = b.Read(rx_buffer)
+		rlen = 0
+		for (rlen != loc_rx_len) {
+			curlen, e  = b.Read(rx_buffer)
+			rlen += curlen
+			if (e != nil) {
+				break
+			}
+		}
 		if (e != nil) {
 			break;
 		}
