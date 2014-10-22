@@ -31,6 +31,7 @@ var rem_tx_len int
 var verbose int
 var proto string
 var ttype string
+var connected_udp int
 
 type test_results struct {
 	elapsed int64;
@@ -54,6 +55,7 @@ func main() {
 	flag.IntVar(&testlen, "l", 10, "Test duration in seconds");
 	flag.IntVar(&verbose, "v", 0, "verbose level");
 	flag.IntVar(&threadcnt, "C", 1, "Concurrent threads");
+	flag.IntVar(&connected_udp, "N", 1, "Connected UDP");
 	flag.StringVar(&tx_msglen, "m", "16384, 16384", "xmit message length");
 	rem_tx_len = 16384
 	flag.StringVar(&rx_msglen, "M", "16384, 16384", "rx message length");
@@ -72,6 +74,9 @@ func main() {
 	switch test_type {
 	case "TCP_STREAM":
 		proto = "tcp";
+		ttype = "stream";
+	case "UDP_STREAM":
+		proto = "udp";
 		ttype = "stream";
 	case "TCP_RR":
 		proto = "tcp";
@@ -159,7 +164,8 @@ func main() {
 	}
 	server_util = server_util / float64(threadcnt)
 	switch test_type {
-	case "TCP_STREAM":
+	case "TCP_STREAM": fallthrough;
+	case "UDP_STREAM":
 		fmt.Printf("\tRecv\tSend\t\t\t\t\tUtilization\n")
 		fmt.Printf("\tmsg\tmsg\tElapsed\n")
 		fmt.Printf("thread\tsize\tsize\tTime\tThroughput\tlocal\tremote\tlocal\tremote\n")
@@ -194,23 +200,31 @@ func main() {
 }
 
 func worker(bw_chan chan test_results, barrier chan struct{}) {
+	var s net.Conn;
+	var e error
 	handshake_buffer := make([]byte, 1024);
-	if (verbose > 0) {
-		fmt.Println("connecting to ", host + ":" + remote_port);
+	if (connected_udp != 0) {
+		if (verbose > 0) {
+			fmt.Println("connecting to ", host + ":" + remote_port);
+		}
+		s, e = net.Dial("tcp", host + ":" + remote_port);
+		if e != nil {
+			log.Fatal(e)
+		}
+		/* say hello */
+		server_arg := fmt.Sprintf("%s:%s:%s:%d:%d:eof\n",
+			"hello", "tcp", ttype, rem_rx_len, rem_tx_len);
+		s.Write([]byte(server_arg));
+		/* read port to connect to */
+		_, e = s.Read(handshake_buffer);
+	} else {
+		handshake_buffer = []byte("9")
 	}
-	s, e := net.Dial("tcp", host + ":" + remote_port);
-	if e != nil {
-		log.Fatal(e)
-	}
-	/* say hello */
-	server_arg := fmt.Sprintf("%s:%s:%s:%d:%d:eof\n",
-		"hello", "tcp", ttype, rem_rx_len, rem_tx_len);
-	s.Write([]byte(server_arg));
-	/* read port to connect to */
-	_, e = s.Read(handshake_buffer);
 	switch test_type {
 	case "TCP_STREAM":
 		tcp_stream(bw_chan, barrier, string(handshake_buffer), s)
+	case "UDP_STREAM":
+		udp_stream(bw_chan, barrier, string(handshake_buffer), s)
 	case "TCP_RR":
 		tcp_rr(bw_chan, barrier, string(handshake_buffer), s)
 	}
@@ -267,6 +281,73 @@ func tcp_stream(bw_chan chan test_results, barrier chan struct{}, server string,
 		&results.server_bytes, &results.server_messages)
 	bw_chan <- results
 }
+
+func udp_stream(bw_chan chan test_results, barrier chan struct{}, server string, s net.Conn) {
+	var results test_results;
+	var wrote int;
+	var b *net.UDPConn
+//	b, e := net.Dial("udp", host + ":" + server)
+	ua, e := net.ResolveUDPAddr("udp",  host + ":" + server)
+	if (connected_udp != 0) {
+		b, e = net.DialUDP("udp", nil, ua)
+	} else {
+		b, e = net.ListenUDP("udp", nil)
+	}
+	if e != nil {
+		log.Fatal(e)
+	}
+	times_up := bool(false);
+	tx_buffer := make([]byte, loc_tx_len);
+	f := func () {
+		times_up = true;
+	}
+	if (verbose > 1) {
+		fmt.Println("waiting on barrier");
+	}
+	<-barrier;
+	if (verbose > 1) {
+		fmt.Println("barrier is now gone");
+	}
+
+	time.AfterFunc(time.Duration(testlen) * time.Second, f);
+	results.bytes = int64(0);
+	results.messages = int64(0);
+	startns := time.Now().UnixNano();
+	for (!times_up) {
+		if (connected_udp == 0) {
+			wrote, e = b.WriteToUDP(tx_buffer, ua)
+		} else {
+			wrote, e = b.Write(tx_buffer);
+		}
+		if e != nil {
+			log.Fatal(e);
+		}
+		results.messages++;
+		results.bytes += int64(wrote);
+	}
+	results.elapsed = time.Now().UnixNano() - startns;
+	if (verbose > 0) {
+		bandwidth := float64(results.bytes) / (float64(results.elapsed) /  float64(1000 * 1000 * 1000));
+		bandwidth = bandwidth * 8.0 / (1000.0 * 1000.0)
+		fmt.Println("Elapsted time is ", results.elapsed);
+		fmt.Println("Wrote ", results.messages, " messages and ", results.bytes, " bytes");
+		fmt.Printf("Bandwidth is %6.2f Mb/s\n", bandwidth);
+	}
+	b.Close();
+	server_result := make([]byte, 1024)
+	if (connected_udp == 1) {
+		_, e = s.Read(server_result)
+		checke(e)
+	}
+	if (verbose > 0) {
+		fmt.Println("server said", string(server_result))
+	}
+	fmt.Sscanf(string(server_result), "goodbye:%d:%f:%d:%d:%d",
+		&results.server_cpu_cnt, &results.server_util, &results.server_elapsed,
+		&results.server_bytes, &results.server_messages)
+	bw_chan <- results
+}
+
 
 func tcp_rr(bw_chan chan test_results, barrier chan struct{}, remote_port string, s net.Conn) {
 	var results test_results;
