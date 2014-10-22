@@ -7,9 +7,8 @@ import (
 	"net"
 	"log"
 	"time"
-//	"strconv"
 	"strings"
-	"io/ioutil"
+	"./utilization"
 )
 
 
@@ -39,135 +38,7 @@ type test_results struct {
 	messages int64;
 }
 
-type akaros_cpu_usage struct {
-	irq, kern, user, idle float64
-}
-
-func read_akaros_cpu(line string, l *akaros_cpu_usage) {
-	line = strings.TrimLeft(line, ":");
-	fmt.Sscan(line, &l.irq);
-	line = strings.TrimLeft(line, ",");
-	fmt.Sscan(line, &l.kern);
-	line = strings.TrimLeft(line, ",");
-	fmt.Sscan(line, &l.user);
-	line = strings.TrimLeft(line, ",");
-	fmt.Sscan(line, &l.idle);
-	fmt.Println("read ", l.irq, " ", l.kern, " ", l.user, " ", l.idle)
-}
-
-func calc_akaros_cpu(before string, after string) {
-	num_cpu := strings.Count(before, ":") - 1;
-	before_cpu := make([]akaros_cpu_usage, num_cpu)
-	after_cpu := make([]akaros_cpu_usage, num_cpu)
-	lines := strings.Split(string(before), "\n");
-	for i, line := range lines {
-		if (i == 0 || i > num_cpu) {
-			continue;
-		}
-		read_akaros_cpu(line, &before_cpu[i - 1])
-	}
-	lines = strings.Split(string(after), "\n");
-	for i, line := range lines {
-		if (i == 0 || i > num_cpu) {
-			continue;
-		}
-		read_akaros_cpu(line, &after_cpu[i - 1])
-	}
-	idle := float64(0.0);
-	busy := float64(0.0);
-	for i := 0; i < num_cpu; i++ {
-		busy += after_cpu[i].irq - before_cpu[i].irq;
-		busy += after_cpu[i].kern - before_cpu[i].kern;
-		busy += after_cpu[i].user - before_cpu[i].user;
-		idle += after_cpu[i].idle - before_cpu[i].idle;
-	}
-	total_tick := idle + busy;
-	utilized := 100.0 * (busy / total_tick);
-	fmt.Println("cpu count is ", num_cpu, "idle=", idle, " busy=", busy);
-	fmt.Printf("cpu utilized = %3.2f%\n", utilized);
-}
-
-type linux_cpu_usage struct {
-	user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice uint64
-}
-
-func read_linux_cpu(line string, l *linux_cpu_usage) {
-	var dontcare string
-	n, e := fmt.Sscan(strings.TrimLeft(line, " "),
-		&dontcare, &l.user, &l.nice, &l.system, &l.idle,
-		&l.iowait, &l.irq, &l.softirq, &l.steal, &l.guest, &l.guest_nice);
-	if (e != nil) {
-		fmt.Println("read ", n, " items err = ", e, "idle was", l.idle)
-	}
-}
-
-func linux_tick_subtract(start uint64, end uint64) (r uint64){
-	r = end - start;
-	if (end >= start ||
-		0 != (start & (uint64(0xffffffff00000000)))) {
-		return;
-	}
-	/* wrapped */
-	r += uint64(0xffffffff00000000)
-	return;
-}
-
-func calc_linux_cpu(before string, after string) {
-	num_cpu := strings.Count(before, "cpu") - 1;
-	before_cpu := make([]linux_cpu_usage, num_cpu)
-	after_cpu := make([]linux_cpu_usage, num_cpu)
-	lines := strings.Split(string(before), "\n");
-	for i, line := range lines {
-		if (i == 0 || i > num_cpu) {
-			continue;
-		}
-		read_linux_cpu(line, &before_cpu[i - 1])
-	}
-	lines = strings.Split(string(after), "\n");
-	for i, line := range lines {
-		if (i == 0 || i > num_cpu) {
-			continue;
-		}
-		read_linux_cpu(line, &after_cpu[i - 1])
-	}
-	idle := uint64(0);
-	busy := uint64(0);
-	for i := 0; i < num_cpu; i++ {
-		idle += linux_tick_subtract(before_cpu[i].idle,
-			after_cpu[i].idle);
-		if (i == 0) {
-			fmt.Println("idle ", idle, " before ", 
-				before_cpu[i].idle, " after ",
-				after_cpu[i].idle);
-		}
-		idle += linux_tick_subtract(before_cpu[i].iowait,
-			after_cpu[i].iowait);
-		busy += linux_tick_subtract(before_cpu[i].user,
-			after_cpu[i].user);
-		busy += linux_tick_subtract(before_cpu[i].nice,
-			after_cpu[i].nice);
-		busy += linux_tick_subtract(before_cpu[i].system,
-			after_cpu[i].system);
-		busy += linux_tick_subtract(before_cpu[i].irq,
-			after_cpu[i].irq);
-		busy += linux_tick_subtract(before_cpu[i].softirq,
-			after_cpu[i].softirq);
-		busy += linux_tick_subtract(before_cpu[i].steal,
-			after_cpu[i].steal);
-		busy += linux_tick_subtract(before_cpu[i].guest,
-			after_cpu[i].guest);
-		busy += linux_tick_subtract(before_cpu[i].guest_nice,
-			after_cpu[i].guest_nice);
-	}
-	fmt.Println("cpu count is ", num_cpu, "idle=", idle, " busy=", busy);
-	total_tick := float64(idle + busy);
-	utilized := 100.0 * (float64(busy) / total_tick);
-	fmt.Printf("cpu utilized = %3.2f\n", utilized);
-}
-
-
 func main() {
-	stats_type := "none"
 	var tx_msglen string
 	var rx_msglen string
 	bw_chan := make(chan test_results)
@@ -227,15 +98,7 @@ func main() {
 		go worker(bw_chan, barrier);
 	}
 	time.Sleep(1 * time.Second)
-	cpu_before, e := ioutil.ReadFile("/proc/stat")
-	if (e == nil) {
-		stats_type = string("linux")
-	} else {
-		cpu_before, e = ioutil.ReadFile("/prof/mpstat")
-		if (e == nil) {
-			stats_type = string("akaros")
-		}
-	}
+	cpu_before, e := utilization.Read_cpu()
 	close(barrier);
 	tot := test_results{0, 0, 0}
 	tot_msgs_per_sec := 0.0
@@ -249,17 +112,9 @@ func main() {
 		mb_per_sec += ((float64(r.bytes) * 8.0) / (1000.0 * 1000.0)) / secs
 		tot_msgs_per_sec += float64(r.messages) / secs;
 	}
-	switch(stats_type) {
-	case "linux":
-		cpu_after, e := ioutil.ReadFile("/proc/stat")
-		checke(e)
-		calc_linux_cpu(string(cpu_before), string(cpu_after))
-	case "akaros":
-		cpu_after, e := ioutil.ReadFile("/prof/mpstat")
-		checke(e)
-		calc_akaros_cpu(string(cpu_before), string(cpu_after))
-	}
-
+	cpu_after, e := utilization.Read_cpu()
+	checke(e)
+	utilization.Calc_cpu(string(cpu_before), string(cpu_after))
 	secs := float64(tot.elapsed) / (1000.0 * 1000.0 * 1000.0);
 	msgs_per_sec := float64(tot.messages) / secs;
 	lat := 0.5 * (1.0 / msgs_per_sec) * 1000.0 * 1000.0

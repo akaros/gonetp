@@ -10,6 +10,7 @@ import (
 	"strings"
 	"strconv"
 	"time"
+	"./utilization"
 )
 
 func checke(e error) {
@@ -64,8 +65,11 @@ func rx_stream(client net.Conn, proto string, msglen int) {
 	ports := strings.SplitAfter((server.Addr().String()), ":")
 	client.Write([]byte(ports[len(ports) - 1]))
 	p, e := server.Accept();
+	checke(e)
 	length, e  := p.Read(buffer)
 	startns := time.Now().UnixNano();
+	cpu_before, e := utilization.Read_cpu()
+	checke(e)
 	bytes := int64(0);
 	messages := int64(0);
 	for (e == nil) {
@@ -77,6 +81,8 @@ func rx_stream(client net.Conn, proto string, msglen int) {
 		log.Fatal(e);
 	}
 	elapsedns := time.Now().UnixNano() - startns;
+	cpu_after, e := utilization.Read_cpu()
+	checke(e)
 	bandwidth := float64(bytes) / (float64(elapsedns) /  float64(1000 * 1000 * 1000));
 	bandwidth = bandwidth * 8.0 / (1000.0 * 1000.0)
 	if (verbose > 0) {
@@ -84,6 +90,7 @@ func rx_stream(client net.Conn, proto string, msglen int) {
 		fmt.Println("Read ", messages, " messages and ", bytes, " bytes");
 		fmt.Println("Bandwidth is", bandwidth, "Mb/s");
 	}
+	utilization.Calc_cpu(string(cpu_before), string(cpu_after))
 }
 
 func rx_rr(client net.Conn, proto string, msglen int, txlen int) {
