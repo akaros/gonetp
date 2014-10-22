@@ -162,7 +162,7 @@ func calc_linux_cpu(before string, after string) {
 	fmt.Println("cpu count is ", num_cpu, "idle=", idle, " busy=", busy);
 	total_tick := float64(idle + busy);
 	utilized := 100.0 * (float64(busy) / total_tick);
-	fmt.Printf("cpu utilized = %3.2f%\n", utilized);
+	fmt.Printf("cpu utilized = %3.2f\n", utilized);
 }
 
 
@@ -239,12 +239,14 @@ func main() {
 	close(barrier);
 	tot := test_results{0, 0, 0}
 	tot_msgs_per_sec := 0.0
+	mb_per_sec := 0.0
 	for i := 0; i < threadcnt; i++ {
 		r := <- bw_chan
 		tot.elapsed += r.elapsed
 		tot.bytes += r.bytes
 		tot.messages += r.messages
-		secs := float64(r.elapsed) / (1000.0 * 1000.0 * 1000.0);
+		secs := float64(r.elapsed) / (1000.0 * 1000.0 * 1000.0)
+		mb_per_sec += ((float64(r.bytes) * 8.0) / (1000.0 * 1000.0)) / secs
 		tot_msgs_per_sec += float64(r.messages) / secs;
 	}
 	switch(stats_type) {
@@ -260,13 +262,11 @@ func main() {
 
 	secs := float64(tot.elapsed) / (1000.0 * 1000.0 * 1000.0);
 	msgs_per_sec := float64(tot.messages) / secs;
-	mb_per_sec := float64(tot.bytes) / secs;
-	mb_per_sec = mb_per_sec * 8.0 / (1000.0 * 1000.0)
 	lat := 0.5 * (1.0 / msgs_per_sec) * 1000.0 * 1000.0
 	fmt.Printf("Bandwidth is %6.2f Mb/s\n", mb_per_sec);
 	fmt.Printf("Message rate is %6.2f Pkts/s\n", tot_msgs_per_sec);
 	if (test_type == "TCP_RR") {
-		fmt.Printf("Average Latency is %6.2f us/pkt %6.2f\n", lat)
+		fmt.Printf("Average Latency is %6.2f us/pkt\n", lat)
 	}
 }
 
