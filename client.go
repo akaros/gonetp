@@ -225,6 +225,7 @@ func main() {
 func worker(bw_chan chan test_results, barrier chan struct{}) {
 	var s net.Conn;
 	var e error
+	var n int
 	handshake_buffer := make([]byte, 1024);
 	if (connected_udp != 0) {
 		if (verbose > 0) {
@@ -239,17 +240,18 @@ func worker(bw_chan chan test_results, barrier chan struct{}) {
 			"hello", "tcp", ttype, rem_rx_len, rem_tx_len);
 		s.Write([]byte(server_arg));
 		/* read port to connect to */
-		_, e = s.Read(handshake_buffer);
+		n, e = s.Read(handshake_buffer);
 	} else {
 		handshake_buffer = []byte("9")
+		n = 1
 	}
 	switch test_type {
 	case "TCP_STREAM":
-		tcp_stream(bw_chan, barrier, string(handshake_buffer), s)
+		tcp_stream(bw_chan, barrier, string(handshake_buffer[:n]), s)
 	case "UDP_STREAM":
-		udp_stream(bw_chan, barrier, string(handshake_buffer), s)
+		udp_stream(bw_chan, barrier, string(handshake_buffer[:n]), s)
 	case "TCP_RR":
-		tcp_rr(bw_chan, barrier, string(handshake_buffer), s)
+		tcp_rr(bw_chan, barrier, string(handshake_buffer[:n]), s)
 	}
 }
 
