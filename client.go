@@ -50,7 +50,7 @@ func main() {
 	bw_chan := make(chan test_results)
 	barrier := make(chan struct{})
 	flag.StringVar(&test_type, "t", "TCP_STREAM", "test type");
-	flag.StringVar(&host, "H", "", "Remote IP");
+	flag.StringVar(&host, "H", "127.0.0.1", "Remote IP");
 	flag.StringVar(&remote_port, "p", "8192", "Remote port");
 	flag.IntVar(&testlen, "l", 10, "Test duration in seconds");
 	flag.IntVar(&verbose, "v", 0, "verbose level");
