@@ -166,19 +166,42 @@ func main() {
 	switch test_type {
 	case "TCP_STREAM": fallthrough;
 	case "UDP_STREAM":
-		fmt.Printf("\tRecv\tSend\t\t\t\t\tUtilization\n")
-		fmt.Printf("\tmsg\tmsg\tElapsed\n")
-		fmt.Printf("thread\tsize\tsize\tTime\tThroughput\tlocal\tremote\tlocal\tremote\n")
-		fmt.Printf("count\tbytes\tbytes\tsecs\tMb/s\t\t%%cpu\t%%cpu\t#cores\t#cores\n")
-		fmt.Printf("......\t......\t......\t......\t......\t\t......\t......\t......\t......\n")
-		fmt.Printf("%6d\t", threadcnt)
-		fmt.Printf("%6d\t%6d\t", rem_rx_len, loc_tx_len)
+		fmt.Printf("rxmsg\ttxmsg\tElapsed\t\tUtilization\n")
+		fmt.Printf("size\tsize\tTime\tTput\tlocal/remote")
+		if (test_type == "UDP_STREAM") {
+			fmt.Printf("\t\t     Messages")
+		}
+		fmt.Printf("\n")
+		fmt.Printf("bytes\tbytes\tsecs\tMb/s\t%%cpu\t   #cores")
+		if (test_type == "UDP_STREAM") {
+			fmt.Printf("\t   OK\t\t   Error")
+		}
+		fmt.Printf("\n")
+		fmt.Printf("\t%6d\t", loc_tx_len)
 		fmt.Printf("%-6.2f\t", secs);
-		fmt.Printf("%6.2f\t\t", mb_per_sec);
-		fmt.Printf("%6.2f\t", u);
-		fmt.Printf("%6.2f\t", server_util);
-		fmt.Printf("%6.2f\t", (u/100.0) * float64(ncpu));
-		fmt.Printf("%6.2f\n", (server_util/100.0) * float64(server_ncpu));
+		fmt.Printf("%6.2f\t", mb_per_sec);
+		fmt.Printf("%3.2f/", u);
+		fmt.Printf("%3.2f ", server_util);
+		fmt.Printf("%2.2f/", (u/100.0) * float64(ncpu));
+		fmt.Printf("%2.2f\t", (server_util/100.0) * float64(server_ncpu));
+		if (test_type == "UDP_STREAM") {
+			fmt.Printf("%9d\t", tot.messages)
+			fmt.Printf("%9d", 436453643)
+		}
+		fmt.Printf("\n")
+		fmt.Printf("%6d",  rem_rx_len);
+		fmt.Printf("\t\t")
+		fmt.Printf("%-6.2f\t", secs);
+		fmt.Printf("%6.2f\t", mb_per_sec);
+		fmt.Printf("%3.2f/", u);
+		fmt.Printf("%3.2f ", server_util);
+		fmt.Printf("%2.2f/", (u/100.0) * float64(ncpu));
+		fmt.Printf("%2.2f\t", (server_util/100.0) * float64(server_ncpu));
+		if (test_type == "UDP_STREAM") {
+			fmt.Printf("%9d\t", tot.messages)
+			fmt.Printf("%9d", 436453643)
+		}
+		fmt.Printf("\n")
 	case "TCP_RR":
 		fmt.Printf("\tRecv\tSend\t\t\t\t\tUtilization\n")
 		fmt.Printf("\tmsg\tmsg\tElapsed\n")
