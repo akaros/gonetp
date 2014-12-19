@@ -402,23 +402,33 @@ func tcp_rr(bw_chan chan test_results, barrier chan struct{}, remote_port string
 	results.messages = int64(0);
 	startns := time.Now().UnixNano();
 	for (!times_up) {
+		rlen = 0
+		for (rlen != loc_rx_len) {
+			curlen, e  = b.Read(rx_buffer)
+			if (verbose > 3) {
+				fmt.Println("message ", results.messages, "curlen=, ", curlen);
+			}
+			rlen += curlen
+			if (rlen > loc_rx_len) {
+				fmt.Println("message ", results.messages, "after read, ", curlen, rlen);
+				log.Fatal(e)
+			}
+			if (e != nil) {
+				break
+			}
+		}
 		wrote, e := b.Write(tx_buffer);
 		if e != nil {
 			log.Fatal(e);
+		}
+		if (verbose > 3) {
+				fmt.Println("message ", results.messages, "wrote=, ", wrote);
 		}
 		if (wrote != loc_tx_len) {
 			fmt.Println("Short write! ", wrote)
 		}
 		results.messages++;
 		results.bytes += int64(wrote);
-		rlen = 0
-		for (rlen != loc_rx_len) {
-			curlen, e  = b.Read(rx_buffer)
-			rlen += curlen
-			if (e != nil) {
-				break
-			}
-		}
 		if (e != nil) {
 			break;
 		}

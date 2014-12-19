@@ -115,7 +115,9 @@ func rx_rr(client net.Conn, proto string, msglen int, txlen int) {
 	ports := strings.SplitAfter((server.Addr().String()), ":")
 	client.Write([]byte(ports[len(ports) - 1]))
 	p, e := server.Accept();
-	length, e  := p.Read(buffer)
+	length := 0
+//	length, e  := p.Read(buffer)
+	checke(e);
 	cpu_before, e := utilization.Read_cpu()
 	startns := time.Now().UnixNano();
 	bytes := int64(0);
@@ -128,12 +130,22 @@ func rx_rr(client net.Conn, proto string, msglen int, txlen int) {
 		if (length != txlen) {
 			fmt.Println("Short write! ", length)
 		}
+		if (verbose > 3) {
+				fmt.Println("message ", messages, "wrote=, ", length);
+		}
 		bytes = bytes + int64(length);
 		messages++;
 		rlen = 0
 		for (rlen != msglen) {
 			curlen, e  = p.Read(buffer)
+			if (verbose > 3) {
+				fmt.Println("message ", messages, "curlen=, ", curlen);
+			}
 			rlen += curlen
+			if (rlen > msglen) {
+				fmt.Println("message ", messages, "after read, ", curlen, rlen);
+				log.Fatal(e)
+			}
 			if (e != nil) {
 				break
 			}
