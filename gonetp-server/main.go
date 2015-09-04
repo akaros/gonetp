@@ -1,16 +1,15 @@
 package main
 
-
 import (
-        "net"
-        "flag"
-        "fmt"
+	"net"
+	"flag"
+	"fmt"
 	"io"
 	"log"
 	"strings"
 	"strconv"
 	"time"
-	"./utilization"
+	"github.com/klueska/gonetp/utilization"
 )
 
 func checke(e error) {

@@ -1,6 +1,5 @@
 package main
 
-
 import (
 	"flag"
 	"fmt"
@@ -8,7 +7,7 @@ import (
 	"log"
 	"time"
 	"strings"
-	"./utilization"
+	"github.com/klueska/gonetp/utilization"
 )
 
 
@@ -17,7 +16,6 @@ func checke(e error) {
 		log.Fatal(e)
 	}
 }
-
 
 var host string
 var test_type string
