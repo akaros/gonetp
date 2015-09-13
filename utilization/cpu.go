@@ -1,20 +1,6 @@
-/*
- * Copyright (c) 2015 Google Inc.
- * Andrew Gallatin <gallatin@google.com>
- *
- * Gonetp is free software: you can redistribute it and/or modify
- * it under the terms of the Lesser GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * Gonetp is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * Lesser GNU General Public License for more details.
- * 
- * See COPYING.LESSER for details on the GNU Lesser General Public License.
- * See COPYING for details on the GNU General Public License.
- */
+// Copyright (c) 2015 Google Inc.
+// Andrew Gallatin <gallatin@google.com>
+// See LICENSE for details
 
 package utilization
 
